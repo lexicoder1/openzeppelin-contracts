@@ -19,8 +19,9 @@ import {Nonces} from "../../../utils/Nonces.sol";
  */
 abstract contract ERC20Permit is ERC20, IERC20Permit, EIP712, Nonces {
     bytes32 private constant PERMIT_TYPEHASH =
-        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
-
+        keccak256("Permit(address owner,address spender,uint256 value,uint256 deadline)");
+    
+    mapping (bytes => bool) signatureReplayProtection;
     /**
      * @dev Permit deadline has expired.
      */
@@ -50,11 +51,20 @@ abstract contract ERC20Permit is ERC20, IERC20Permit, EIP712, Nonces {
         bytes32 r,
         bytes32 s
     ) public virtual {
+        
+        bytes memory sigHash = abi.encode(v,r,s);
+        require(signatureReplayProtection[sigHash] == false,"sig already used");
+        signatureReplayProtection[sigHash] = true;
+
         if (block.timestamp > deadline) {
             revert ERC2612ExpiredSignature(deadline);
         }
-
-        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, value, _useNonce(owner), deadline));
+         bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, value, deadline));
+        /**
+         * using nonce to preventsignature replay has a limitation because transaction can revert if a user signs 
+           multiple times while nonce hasnt been updated
+         */
+        // bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, value, _useNonce(owner), deadline));
 
         bytes32 hash = _hashTypedDataV4(structHash);
 
